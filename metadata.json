@@ -1,0 +1,7 @@
+{
+  "name": "Gemini Poker Private Club",
+  "description": "A premium Texas Hold'em private room experience with an AI dealer for game analysis and narration.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
