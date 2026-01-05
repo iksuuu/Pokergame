@@ -7,6 +7,7 @@ export interface Card {
   rank: Rank;
 }
 
+// Ensure 'SHOWDOWN' is included in the union to avoid type mismatch in the game logic.
 export type GameStage = 'LOBBY' | 'PREFLOP' | 'FLOP' | 'TURN' | 'RIVER' | 'SHOWDOWN';
 
 export interface GameLogEntry {

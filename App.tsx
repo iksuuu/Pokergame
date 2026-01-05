@@ -9,7 +9,7 @@ import PlayerSeat from './components/PlayerSeat';
 import CardUI from './components/CardUI';
 import GameLog from './components/GameLog';
 import RaiseModal from './components/RaiseModal';
-import { Trophy, RotateCcw, Share2, History, Radio, Cpu, UserPlus, Home, Users } from 'lucide-react';
+import { Trophy, RotateCcw, Share2, History, Radio, Cpu, UserPlus, Home, Users, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -24,21 +24,38 @@ const App: React.FC = () => {
   const [showRaiseModal, setShowRaiseModal] = useState(false);
   
   const npcTimerRef = useRef<number | null>(null);
+  const isHostRef = useRef(false);
 
+  // 初始化实时监听
   useEffect(() => {
     const hash = window.location.hash.replace('#', '');
     if (hash && hash.startsWith('room-')) {
       setIsJoining(true);
-      realtime.init(hash, (remoteState) => {
-        setGameState(remoteState);
-        // 如果当前玩家已经在列表里，自动关闭大厅
-        if (remoteState.players.some(p => p.name === userName && userName !== '')) {
-          setInLobby(false);
+      realtime.init(hash, (remoteData) => {
+        // 处理云端传来的各种指令
+        if (remoteData.type === 'JOIN_REQUEST') {
+          // 房主收到加入请求，同步当前状态
+          if (isHostRef.current && gameState) {
+            realtime.broadcast({ type: 'SYNC_STATE', state: gameState });
+          }
+        } else if (remoteData.type === 'SYNC_STATE') {
+          // 加入者收到房主的同步状态
+          const remoteState = remoteData.state as GameState;
+          setGameState(remoteState);
+          if (remoteState.players.some(p => p.name === userName && userName !== '')) {
+            setInLobby(false);
+          }
+        } else if (!remoteData.type) {
+          // 标准游戏状态更新
+          setGameState(remoteData);
+          if (remoteData.players.some(p => p.name === userName && userName !== '')) {
+            setInLobby(false);
+          }
         }
       });
-      setAiDealerVoice("正在加入好友的房间...");
+      setAiDealerVoice("检测到邀请链接，准备加入...");
     }
-  }, [userName]);
+  }, [userName, gameState]);
 
   const syncState = (state: GameState) => {
     setGameState(state);
@@ -48,43 +65,34 @@ const App: React.FC = () => {
   const createRoom = () => {
     const code = 'room-' + Math.random().toString(36).substring(7).toUpperCase();
     window.location.hash = code;
+    isHostRef.current = true;
     return code;
   };
 
   const backToLobby = () => {
     window.location.hash = '';
+    isHostRef.current = false;
     setInLobby(true);
     setIsJoining(false);
     setGameState(null);
     setWinners([]);
-    if (npcTimerRef.current) window.clearTimeout(npcTimerRef.current);
+    realtime.close();
   };
 
+  // 好友通过链接加入
   const handleJoinFriend = () => {
-    if (!userName || !gameState) return;
+    if (!userName) return;
+    setIsLoading(true);
+    // 向房主发送加入请求
+    realtime.broadcast({ type: 'JOIN_REQUEST', from: userName });
     
-    const updatedPlayers = [...gameState.players];
-    const waitingIndex = updatedPlayers.findIndex(p => p.id === 'waiting');
-    
-    if (waitingIndex !== -1) {
-      updatedPlayers[waitingIndex] = {
-        ...updatedPlayers[waitingIndex],
-        id: 'p2-' + Math.random().toString(36).substring(5),
-        name: userName,
-        isNpc: false,
-        chips: INITIAL_CHIPS
-      };
-      const newState = { ...gameState, players: updatedPlayers };
-      syncState(newState);
-      setInLobby(false);
-    } else {
-      // 如果已经有人了，检查自己是否是其中之一
-      if (updatedPlayers.some(p => p.name === userName)) {
-        setInLobby(false);
-      } else {
-        alert("房间已满或对局已开始。");
+    // 设置一个超时提醒
+    setTimeout(() => {
+      if (inLobby) {
+        setIsLoading(false);
+        setAiDealerVoice("房主尚未响应，请重试或检查链接。");
       }
-    }
+    }, 5000);
   };
 
   const initGame = useCallback((mode: 'SINGLE' | 'MULTIPLAYER', isNextHand: boolean = false) => {
@@ -102,8 +110,8 @@ const App: React.FC = () => {
     let roomCode = '';
     if (mode === 'MULTIPLAYER') {
       roomCode = window.location.hash.replace('#', '') || createRoom();
-      realtime.init(roomCode, (remoteState) => {
-        setGameState(remoteState);
+      realtime.init(roomCode, (remoteData) => {
+         // (这里的逻辑已在 useEffect 中统一处理)
       });
     } else {
       window.location.hash = ''; 
@@ -167,7 +175,7 @@ const App: React.FC = () => {
     if (mode === 'MULTIPLAYER') syncState(newState); else setGameState(newState);
     setInLobby(false);
     setWinners([]);
-    setAiDealerVoice(mode === 'SINGLE' ? "单机练习开始。" : "房间已就绪，请分享链接。");
+    setAiDealerVoice(mode === 'SINGLE' ? "单机练习开始。" : "在线房已创建，等待好友中...");
   }, [userName, gameState]);
 
   const settleGame = async (state: GameState) => {
@@ -188,15 +196,18 @@ const App: React.FC = () => {
       return p;
     });
 
-    const finalState = { ...state, players: updatedPlayers, stage: 'SHOWDOWN' as GameStage };
+    // Fix: Explicitly set the stage to 'SHOWDOWN' and ensure the object satisfies GameState interface.
+    const finalState: GameState = { ...state, players: updatedPlayers, stage: 'SHOWDOWN' };
     if (state.roomCode.startsWith('room-')) syncState(finalState); else setGameState(finalState);
 
-    const winnerNames = currentWinners.map(w => w.player.name).join(', ');
-    const commentary = await getDealerCommentary(finalState, `${winnerNames} 赢得了本局`);
+    // 生成详细的胜利广播
+    const winnerDetails = currentWinners.map(w => `${w.player.name} (${w.hand.label})`).join(', ');
+    const commentary = await getDealerCommentary(finalState, `${winnerDetails} 赢得了本局`);
     setAiDealerVoice(commentary);
   };
 
   const handleAction = async (action: 'FOLD' | 'CHECK' | 'CALL' | 'RAISE', amount?: number) => {
+    // Fix: This comparison is now safe because 'SHOWDOWN' is a valid member of GameStage.
     if (!gameState || gameState.stage === 'SHOWDOWN') return;
     
     const updatedPlayers = [...gameState.players];
@@ -242,13 +253,20 @@ const App: React.FC = () => {
     if (activePlayers.length === 1) {
       const winner = activePlayers[0];
       winner.chips += nextPot;
-      const finalState = { ...gameState, players: updatedPlayers, pot: 0, stage: 'SHOWDOWN' as GameStage };
+      // Fix: Ensure finalState correctly transitions to SHOWDOWN with GameState type enforcement.
+      const finalState: GameState = { ...gameState, players: updatedPlayers, pot: 0, stage: 'SHOWDOWN' };
       if (gameState.roomCode.startsWith('room-')) syncState(finalState); else setGameState(finalState);
-      setWinners([{ player: winner, hand: { score: 0, label: '独赢', handName: 'Win', winningCards: [] } }]);
+      
+      const soloWinResult = { player: winner, hand: { score: 0, label: '独赢', handName: 'Win', winningCards: [] } };
+      setWinners([soloWinResult]);
+      
+      const commentary = await getDealerCommentary(finalState, `${winner.name} 因对手弃牌独赢本局`);
+      setAiDealerVoice(commentary);
       return;
     }
 
-    let nextStage = gameState.stage;
+    // Fix: Explicitly type nextStage as GameStage to allow 'SHOWDOWN' assignment.
+    let nextStage: GameStage = gameState.stage;
     let nextCommunity = [...gameState.communityCards];
     let nextDeck = [...gameState.deck];
 
@@ -277,12 +295,12 @@ const App: React.FC = () => {
     setTimeout(() => setShowInviteTooltip(false), 2000);
   };
 
-  const hero = gameState?.players.find(p => p.name === userName);
-  const heroIndex = gameState?.players.findIndex(p => p.name === userName) ?? 0;
-  const isHeroTurn = gameState?.currentPlayerIndex === heroIndex;
+  const heroIndex = gameState?.players.findIndex(p => p.name === userName) ?? -1;
+  const isHeroTurn = heroIndex !== -1 && gameState?.currentPlayerIndex === heroIndex;
+  const hero = heroIndex !== -1 ? gameState?.players[heroIndex] : null;
 
   useEffect(() => {
-    if (gameState && gameState.stage !== 'SHOWDOWN' && !isHeroTurn) {
+    if (gameState && gameState.stage !== 'SHOWDOWN' && gameState.currentPlayerIndex !== -1) {
       const currentPlayer = gameState.players[gameState.currentPlayerIndex];
       if (currentPlayer.isNpc) {
         if (npcTimerRef.current) window.clearTimeout(npcTimerRef.current);
@@ -303,10 +321,10 @@ const App: React.FC = () => {
             <Trophy className="text-white" size={40} />
           </div>
           <h1 className="text-3xl font-black text-white mb-2 tracking-tighter uppercase">
-            {isJoining ? '加入牌局' : 'Gemini Poker Club'}
+            {isJoining ? '正在进入' : 'Gemini Poker Club'}
           </h1>
           <p className="text-neutral-500 text-xs mb-12 uppercase tracking-[0.3em] text-center">
-            {isJoining ? '输入昵称即刻与好友开战' : '私人定制 · 在线对战'}
+            {isJoining ? '正在同步云端对局状态' : '私人定制 · 跨网对战'}
           </p>
           
           <div className="w-full space-y-6">
@@ -321,11 +339,11 @@ const App: React.FC = () => {
             {isJoining ? (
               <button 
                 onClick={handleJoinFriend} 
-                disabled={!userName} 
+                disabled={!userName || isLoading} 
                 className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:opacity-30 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all"
               >
-                <Users size={18} />
-                进入房间
+                {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Users size={18} />}
+                {isLoading ? '正在连接房主...' : '确认加入'}
               </button>
             ) : (
               <div className="grid grid-cols-2 gap-4">
@@ -335,14 +353,14 @@ const App: React.FC = () => {
                  </button>
                  <button onClick={() => initGame('MULTIPLAYER')} disabled={!userName} className="bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-3xl p-6 transition-all flex flex-col items-center gap-2">
                    <UserPlus className="text-yellow-400" />
-                   <span className="text-white font-bold text-xs">好友对战</span>
+                   <span className="text-white font-bold text-xs">创建好友房</span>
                  </button>
               </div>
             )}
             
             {isJoining && (
               <button onClick={backToLobby} className="w-full text-neutral-600 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">
-                创建新对局
+                放弃并创建新对局
               </button>
             )}
           </div>
@@ -362,7 +380,9 @@ const App: React.FC = () => {
         <div className={`flex items-center gap-4 px-6 py-3 rounded-full border shadow-2xl bg-black/60 border-white/10 ${isShowdown ? 'border-yellow-500/30' : ''}`}>
           <Radio size={14} className="text-yellow-500 animate-pulse" />
           <div className="text-xs truncate text-neutral-200">
-            {isShowdown && winners.length > 0 ? `${winners[0].player.name} 获胜!` : aiDealerVoice}
+            {isShowdown && winners.length > 0 
+              ? `${winners.map(w => `${w.player.name} (${w.hand.label})`).join(', ')} 获胜!` 
+              : aiDealerVoice}
           </div>
         </div>
       </div>
@@ -376,7 +396,7 @@ const App: React.FC = () => {
         {gameState.roomCode.startsWith('room-') && (
           <button onClick={copyInviteLink} className="bg-black/40 border border-white/10 px-3 py-2 rounded-xl text-neutral-400 hover:text-white transition-all flex items-center gap-2">
             <Share2 size={14} />
-            <span className="text-[10px] font-black uppercase">{showInviteTooltip ? '已复制' : '分享房间'}</span>
+            <span className="text-[10px] font-black uppercase">{showInviteTooltip ? '链接已复制' : '分享房间'}</span>
           </button>
         )}
       </div>
