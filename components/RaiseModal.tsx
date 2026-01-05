@@ -12,14 +12,14 @@ interface RaiseModalProps {
   onCancel: () => void;
 }
 
-const RaiseModal: React.FC<RaiseModalProps> = ({ 
-  minRaise, 
-  maxRaise, 
-  currentPot, 
+const RaiseModal: React.FC<RaiseModalProps> = ({
+  minRaise,
+  maxRaise,
+  currentPot,
   currentBet,
   playerBet,
-  onConfirm, 
-  onCancel 
+  onConfirm,
+  onCancel
 }) => {
   const [amount, setAmount] = useState(minRaise);
 
@@ -29,7 +29,8 @@ const RaiseModal: React.FC<RaiseModalProps> = ({
 
   const handleQuickAmount = (ratio: number) => {
     const target = Math.floor(currentPot * ratio) + currentBet;
-    setAmount(Math.min(Math.max(target, minRaise), maxRaise));
+    const finalAmount = Math.min(Math.max(target, minRaise), maxRaise);
+    setAmount(finalAmount);
   };
 
   return (
@@ -52,10 +53,10 @@ const RaiseModal: React.FC<RaiseModalProps> = ({
         </div>
 
         <div className="space-y-6">
-          <input 
-            type="range" 
-            min={minRaise} 
-            max={maxRaise} 
+          <input
+            type="range"
+            min={minRaise}
+            max={maxRaise}
             value={amount}
             onChange={(e) => setAmount(parseInt(e.target.value))}
             className="w-full h-2 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
@@ -64,10 +65,11 @@ const RaiseModal: React.FC<RaiseModalProps> = ({
           <div className="grid grid-cols-3 gap-3">
             <button onClick={() => handleQuickAmount(0.33)} className="bg-white/5 hover:bg-white/10 text-white text-xs font-bold py-3 rounded-xl transition-all border border-white/5">1/3 POT</button>
             <button onClick={() => handleQuickAmount(0.5)} className="bg-white/5 hover:bg-white/10 text-white text-xs font-bold py-3 rounded-xl transition-all border border-white/5">1/2 POT</button>
-            <button onClick={() => setAmount(maxRaise)} className="bg-red-900/20 hover:bg-red-900/40 text-red-400 text-xs font-bold py-3 rounded-xl transition-all border border-red-500/20 uppercase tracking-widest">All-in</button>
+            <button onClick={() => setAmount(maxRaise)} className="bg-red-900/20 hover:bg-red-900/40 text-red-400 text-xs font-bold py-3 rounded-xl transition-all border border-red-500/20 uppercase tracking-widest">设置 All-in</button>
+            <button onClick={() => onConfirm(maxRaise)} className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-lg active:scale-95 uppercase tracking-widest col-span-3">确认 All-in</button>
           </div>
 
-          <button 
+          <button
             onClick={() => onConfirm(amount)}
             className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-yellow-900/20 transition-all active:scale-95"
           >

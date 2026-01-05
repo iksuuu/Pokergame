@@ -13,13 +13,43 @@ interface PlayerSeatProps {
 
 const PlayerSeat: React.FC<PlayerSeatProps> = ({ player, isCurrent, isHero, showCards, winningCards }) => {
   const isWinner = player.lastAction === '赢家!';
-  
+  const [timeLeft, setTimeLeft] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (player.isOnline === false && player.offlineSince) {
+      const updateTimer = () => {
+        const elapsed = Math.floor((Date.now() - player.offlineSince!) / 1000);
+        const remaining = Math.max(0, 120 - elapsed);
+        setTimeLeft(remaining);
+      };
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setTimeLeft(null);
+    }
+  }, [player.isOnline, player.offlineSince]);
+
   const isWinningCard = (card: Card) => {
     return winningCards?.some(wc => wc.rank === card.rank && wc.suit === card.suit) || false;
   };
 
   return (
-    <div className={`relative flex flex-col items-center gap-3 transition-transform duration-500 ${isWinner ? 'scale-110' : ''}`}>
+    <div className={`relative flex flex-col items-center gap-3 transition-opacity duration-500 ${isWinner ? 'scale-110' : ''} ${(player.isOnline === false) ? 'opacity-30 grayscale' : 'opacity-100'}`}>
+      {/* 离线标识 */}
+      {player.isOnline === false && (
+        <div className="absolute -top-20 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-[60] animate-in fade-in zoom-in duration-300">
+          <div className="bg-red-600 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-2xl uppercase tracking-[0.2em] whitespace-nowrap border-2 border-white/20">
+            玩家离线
+          </div>
+          {timeLeft !== null && (
+            <div className={`text-[10px] font-black px-3 py-0.5 rounded-lg bg-black/60 border border-red-500/30 ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-neutral-300'}`}>
+              解散倒计时: {timeLeft}s
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 获胜光环动画 */}
       {isWinner && (
         <div className="absolute inset-0 -m-8 bg-yellow-500/20 rounded-full blur-3xl animate-pulse"></div>
@@ -51,12 +81,12 @@ const PlayerSeat: React.FC<PlayerSeatProps> = ({ player, isCurrent, isHero, show
           <div className="text-neutral-600 italic text-xs py-6 uppercase font-bold tracking-widest">Folded</div>
         ) : (
           player.cards.map((c, i) => (
-            <CardUI 
-              key={i} 
-              card={c} 
-              hidden={!isHero && !showCards && !isWinner} 
+            <CardUI
+              key={i}
+              card={c}
+              hidden={!isHero && !showCards && !isWinner}
               // Hero 的牌尺寸最大，其余玩家缩小
-              className={isHero ? "scale-100" : "scale-75 origin-center"} 
+              className={isHero ? "scale-100" : "scale-75 origin-center"}
               highlight={isWinner && isWinningCard(c)}
             />
           ))
@@ -66,7 +96,7 @@ const PlayerSeat: React.FC<PlayerSeatProps> = ({ player, isCurrent, isHero, show
       {/* Profile */}
       <div className={`
         flex flex-col items-center p-4 rounded-3xl border-2 transition-all duration-300 w-32 md:w-40 relative z-10
-        ${isWinner ? 'bg-yellow-900/60 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.6)]' : 
+        ${isWinner ? 'bg-yellow-900/60 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.6)]' :
           (isCurrent ? 'bg-indigo-900/60 border-indigo-400 scale-105 shadow-xl' : 'bg-black/60 border-neutral-800')}
         ${player.isFolded ? 'opacity-40 grayscale blur-[0.5px]' : ''}
       `}>

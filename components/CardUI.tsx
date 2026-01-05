@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Card as CardType } from '../types';
-import { SuitIcon } from '../constants.tsx';
+import { SuitIcon } from './SuitIcon';
 
 interface CardProps {
   card?: CardType;

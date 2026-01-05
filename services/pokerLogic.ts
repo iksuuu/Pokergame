@@ -1,6 +1,6 @@
 
-import { Card, Rank, Suit } from '../types';
-import { SUITS, RANKS } from '../constants.tsx';
+import { Card, Rank, Suit, HandResult } from '../types';
+import { SUITS, RANKS } from '../constants';
 
 export const createDeck = (): Card[] => {
   const deck: Card[] = [];
@@ -28,13 +28,6 @@ const rankToValue = (rank: Rank): number => {
   };
   return values[rank];
 };
-
-export interface HandResult {
-  score: number;
-  label: string;
-  handName: string;
-  winningCards: Card[];
-}
 
 /**
  * 辅助函数：将 5 张牌转换为唯一的权重得分，解决踢脚牌问题
@@ -64,7 +57,7 @@ export const evaluateHand = (holeCards: Card[], communityCards: Card[]): HandRes
   const getStraight = (cards: Card[]): Card[] | null => {
     const unique = cards.filter((c, i, self) => i === self.findIndex(t => t.rank === c.rank));
     if (unique.length < 5) return null;
-    
+
     // 常规顺子
     for (let i = 0; i <= unique.length - 5; i++) {
       if (rankToValue(unique[i].rank) - rankToValue(unique[i + 4].rank) === 4) {
@@ -85,11 +78,11 @@ export const evaluateHand = (holeCards: Card[], communityCards: Card[]): HandRes
   if (flushCardsFull) {
     const sfCards = getStraight(flushCardsFull);
     if (sfCards) {
-      return { 
-        score: getWeightScore(9000000, sfCards), 
-        label: '同花顺', 
-        handName: 'Straight Flush', 
-        winningCards: sfCards 
+      return {
+        score: getWeightScore(9000000, sfCards),
+        label: '同花顺',
+        handName: 'Straight Flush',
+        winningCards: sfCards
       };
     }
   }

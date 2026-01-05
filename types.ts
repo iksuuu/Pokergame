@@ -7,6 +7,13 @@ export interface Card {
   rank: Rank;
 }
 
+export interface HandResult {
+  score: number;
+  label: string;
+  handName: string;
+  winningCards: Card[];
+}
+
 // Ensure 'SHOWDOWN' is included in the union to avoid type mismatch in the game logic.
 export type GameStage = 'LOBBY' | 'PREFLOP' | 'FLOP' | 'TURN' | 'RIVER' | 'SHOWDOWN';
 
@@ -31,6 +38,8 @@ export interface Player {
   lastAction?: string;
   isNpc?: boolean;
   isHost?: boolean; // 房主，负责逻辑计算
+  isOnline?: boolean; // 玩家在线状态
+  offlineSince?: number; // 离线开始时间戳
 }
 
 export interface GameState {

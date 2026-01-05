@@ -2,7 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import { GameState } from "../types";
 
 // Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 export const getDealerCommentary = async (gameState: GameState, lastAction: string) => {
   try {
@@ -15,22 +16,16 @@ export const getDealerCommentary = async (gameState: GameState, lastAction: stri
       公共牌: ${gameState.communityCards.map(c => c.rank + c.suit).join(', ')}
       
       请用中文提供一句吸引人的、简短的解说或洞察。
-      保持专业、风趣，不要透露任何玩家的底牌。
+      保持专业、风趣，不要透露任何玩家底牌。
       如果是结算阶段(SHOWDOWN)，请祝贺赢家。
     `;
 
-    // Use ai.models.generateContent to query GenAI with both the model name and prompt.
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: {
-        maxOutputTokens: 100,
-        temperature: 0.8,
-      }
-    });
+    if (!ai) return "AI 荷官暂时不可用。";
 
-    // The GenerateContentResponse features a text property (not a method) that directly returns the string output.
-    return response.text?.trim() || "这局比赛真是扑朔迷离。";
+    const model = (ai as any).getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text()?.trim() || "这局比赛真是扑朔迷离。";
   } catch (error) {
     console.error("Gemini Commentary Error:", error);
     return "让我们看看接下来会发生什么。";

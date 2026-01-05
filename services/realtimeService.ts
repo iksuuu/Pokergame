@@ -1,86 +1,80 @@
 
+import { io, Socket } from 'socket.io-client';
 import { GameState } from '../types';
 
-/**
- * 云端同步引擎 (Cloud Sync Engine)
- * 使用公用的实时中继服务实现跨设备同步
- */
+// Detect environment or hardcode for now. 
+// For Google Cloud deployment, this should be an env var or the production URL.
+// For local dev, localhost:3001.
+const SERVER_URL = 'http://localhost:3001';
+
 class RealtimeService {
-  private roomCode: string | null = null;
-  private onMessageCallback: ((state: any) => void) | null = null;
-  private lastUpdate: number = 0;
-  private pollInterval: number | null = null;
+  private socket: Socket | null = null;
+  private userId: string;
 
-  init(roomCode: string, onMessage: (state: any) => void) {
-    this.roomCode = roomCode;
-    this.onMessageCallback = onMessage;
-    this.stopPolling();
-    this.startPolling();
+  constructor() {
+    // Persistent User ID for reconnects
+    let storedId = localStorage.getItem('poker_user_id');
+    if (!storedId) {
+      storedId = 'user_' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem('poker_user_id', storedId);
+    }
+    this.userId = storedId;
+
+    // Initialize socket immediately
+    this.socket = io(SERVER_URL, {
+      auth: { userId: this.userId },
+      autoConnect: false // We'll manage connection explicitly
+    });
   }
 
-  // 广播状态到云端
-  async broadcast(state: any) {
-    if (!this.roomCode) return;
-    try {
-      // 使用公用的实时中继接口 (这里使用 ntfy.sh 作为演示中继，它支持 CORS 且无需 Key)
-      await fetch(`https://ntfy.sh/poker_club_${this.roomCode}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          ...state,
-          _timestamp: Date.now()
-        }),
-        headers: {
-          'Title': 'Poker State Update',
-          'Tags': 'poker,update'
-        }
-      });
-    } catch (e) {
-      console.error('Cloud Broadcast Error:', e);
+  getUserId() {
+    return this.userId;
+  }
+
+  connect() {
+    if (this.socket && !this.socket.connected) {
+      this.socket.connect();
     }
   }
 
-  // 轮询云端状态
-  private startPolling() {
-    this.pollInterval = window.setInterval(async () => {
-      if (!this.roomCode) return;
-      try {
-        // 获取最新的消息内容
-        const response = await fetch(`https://ntfy.sh/poker_club_${this.roomCode}/json?poll=1&since=1m`);
-        const text = await response.text();
-        const lines = text.trim().split('\n');
-        
-        for (const line of lines) {
-          if (!line) continue;
-          const data = JSON.parse(line);
-          // 只有解析出消息正文且时间戳更新时才触发回调
-          if (data.message) {
-            try {
-              const state = JSON.parse(data.message);
-              if (state._timestamp && state._timestamp > this.lastUpdate) {
-                this.lastUpdate = state._timestamp;
-                if (this.onMessageCallback) this.onMessageCallback(state);
-              }
-            } catch (innerError) {
-              // 忽略非JSON消息
-            }
-          }
-        }
-      } catch (e) {
-        // 轮询异常处理
-      }
-    }, 1500); // 1.5秒轮询一次，兼顾实时性与性能
+  createRoom(userName: string, onCreated: (roomId: string) => void) {
+    if (!this.socket) this.connect();
+    this.socket?.emit('createRoom', { userName });
+    this.socket?.once('roomCreated', ({ roomId }) => {
+      onCreated(roomId);
+    });
   }
 
-  private stopPolling() {
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
-    }
+  joinRoom(roomId: string, userName: string) {
+    if (!this.socket) this.connect();
+    this.socket?.emit('joinRoom', { roomId, userName });
+  }
+
+  startGame(roomId: string) {
+    this.socket?.emit('startGame', { roomId });
+  }
+
+  startNextHand(roomId: string) {
+    this.socket?.emit('nextHand', { roomId });
+  }
+
+  sendAction(roomId: string, action: string, amount?: number) {
+    this.socket?.emit('action', { roomId, action: { type: action, amount } });
+  }
+
+  on(event: string, callback: (data: any) => void) {
+    this.socket?.on(event, callback);
+  }
+
+  off(event: string) {
+    this.socket?.off(event);
   }
 
   close() {
-    this.stopPolling();
-    this.roomCode = null;
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
   }
 }
 
