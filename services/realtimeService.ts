@@ -5,7 +5,10 @@ import { GameState } from '../types';
 // Detect environment or hardcode for now. 
 // For Google Cloud deployment, this should be an env var or the production URL.
 // For local dev, localhost:3001.
-const SERVER_URL = 'http://localhost:3001';
+// For production, this should point to your Cloud Run URL.
+// We can use an environment variable set during build or runtime detection.
+const SERVER_URL = ((import.meta as any).env?.VITE_SERVER_URL) ||
+  (window.location.port && window.location.port !== '3001' ? 'http://localhost:3001' : window.location.origin);
 
 class RealtimeService {
   private socket: Socket | null = null;
