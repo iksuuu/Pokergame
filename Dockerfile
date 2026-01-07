@@ -6,22 +6,24 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# Stage 2: Build Backend & Final Image
+# Stage 2: Build Backend
+FROM node:20-slim AS backend-builder
+WORKDIR /app
+COPY . .
+RUN cd server && npm install && npm run build
+
+# Stage 3: Final Production Image
 FROM node:20-slim
 WORKDIR /app
 
-# Copy server dependencies
+# Copy server production dependencies
 COPY server/package*.json ./server/
 RUN cd server && npm install --omit=dev
 
-# Copy server source
-COPY server ./server
-COPY types.ts ./
-COPY constants.ts ./
-COPY services/gameEngine.ts ./services/
-COPY services/pokerLogic.ts ./services/
+# Copy compiled backend
+COPY --from=backend-builder /app/server/dist ./server/dist
 
-# Copy built frontend from Stage 1
+# Copy frontend static files
 COPY --from=frontend-builder /app/dist ./dist
 
 # Environment variables
@@ -30,5 +32,5 @@ ENV NODE_ENV=production
 
 EXPOSE 8080
 
-# Start the server
-CMD ["node", "--loader", "ts-node/esm", "--experimental-specifier-resolution=node", "server/index.ts"]
+# Start the server using the compiled JS
+CMD ["node", "server/dist/index.js"]
