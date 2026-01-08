@@ -10,12 +10,9 @@ RUN npm run build
 FROM node:20-slim
 WORKDIR /app
 
-# Copy root and server dependencies
+# Copy ALL dependencies (unified at root)
 COPY package*.json ./
-COPY server/package*.json ./server/
-
-# Install dependencies (including ts-node in production)
-RUN npm install --omit=dev && cd server && npm install --omit=dev
+RUN npm install --omit=dev
 
 # Copy source files
 COPY server ./server
@@ -32,5 +29,5 @@ ENV NODE_ENV=production
 
 EXPOSE 8080
 
-# Start scanning for files and run via ts-node
-CMD ["npm", "start", "--prefix", "server"]
+# Start scanning for files and run via ts-node directly from root
+CMD ["npm", "start"]
