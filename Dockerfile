@@ -33,4 +33,4 @@ ENV NODE_ENV=production
 EXPOSE 8080
 
 # Start the server using the compiled JS
-CMD ["node", "server/dist/index.js"]
+CMD ["node", "server/dist/server/index.js"]
