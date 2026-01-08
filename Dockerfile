@@ -6,24 +6,24 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# Stage 2: Build Backend
-FROM node:20-slim AS backend-builder
-WORKDIR /app
-COPY . .
-RUN cd server && npm install && npm run build
-
-# Stage 3: Final Production Image
+# Stage 2: Final Production Image
 FROM node:20-slim
 WORKDIR /app
 
-# Copy server production dependencies
+# Copy root and server dependencies
+COPY package*.json ./
 COPY server/package*.json ./server/
-RUN cd server && npm install --omit=dev
 
-# Copy compiled backend
-COPY --from=backend-builder /app/server/dist ./server/dist
+# Install dependencies (including ts-node in production)
+RUN npm install --omit=dev && cd server && npm install --omit=dev
 
-# Copy frontend static files
+# Copy source files
+COPY server ./server
+COPY types.ts ./
+COPY constants.ts ./
+COPY services ./services
+
+# Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/dist ./dist
 
 # Environment variables
@@ -32,5 +32,5 @@ ENV NODE_ENV=production
 
 EXPOSE 8080
 
-# Start the server using the compiled JS
-CMD ["node", "server/dist/server/index.js"]
+# Start scanning for files and run via ts-node
+CMD ["npm", "start", "--prefix", "server"]
