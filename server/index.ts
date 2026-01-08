@@ -13,6 +13,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 
+// Health check for Cloud Run
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
 // Serve static files from the frontend build
 const distPath = path.join(process.cwd(), 'dist');
 app.use(express.static(distPath));

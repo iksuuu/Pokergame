@@ -19,6 +19,8 @@ COPY server ./server
 COPY types.ts ./
 COPY constants.ts ./
 COPY services ./services
+COPY tsconfig.json ./
+COPY server/tsconfig.json ./server/
 
 # Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/dist ./dist
